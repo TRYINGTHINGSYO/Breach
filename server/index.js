@@ -427,32 +427,62 @@ function botShoot(bot) {
 }
 
 function updateBots() {
+  const centerX = (MAP_W / 2) * CELL;
+  const centerY = (MAP_H / 2) * CELL;
+
   for (const bot of bots.values()) {
     if (!bot.alive) continue;
 
     bot.aiTimer -= 1;
     if (bot.shootCooldown > 0) bot.shootCooldown -= 1;
+    if (bot.strafeDir === undefined) bot.strafeDir = 1;
+    if (bot.patrolAngle === undefined) bot.patrolAngle = Math.random() * Math.PI * 2;
 
     if (bot.aiTimer <= 0) {
-      bot.aiTimer = 30 + Math.random() * 50;
+      bot.aiTimer = 20 + Math.random() * 35;
       const enemies = allCombatants().filter((e) => e.alive && e.team !== bot.team);
       bot.aiTarget = enemies[Math.floor(Math.random() * enemies.length)] || null;
+      bot.strafeDir = Math.random() < 0.5 ? -1 : 1;
     }
+
+    const spd = MOVE_SPEED * 0.8;
+    let moveAngle = bot.patrolAngle;
+    let shouldMove = true;
 
     if (bot.aiTarget && bot.aiTarget.alive) {
       const dx = bot.aiTarget.x - bot.x;
       const dy = bot.aiTarget.y - bot.y;
       bot.angle = Math.atan2(dy, dx);
       const dist = Math.hypot(dx, dy);
-      const spd = MOVE_SPEED * 0.65;
-      const nx = bot.x + Math.cos(bot.angle) * spd;
-      const ny = bot.y + Math.sin(bot.angle) * spd;
-      if (dist > 180 && canMoveAt(nx, bot.y)) bot.x = nx;
-      if (dist > 180 && canMoveAt(bot.x, ny)) bot.y = ny;
       bot.aiming = dist < 420;
-      if (dist < 520 && bot.shootCooldown <= 0 && Math.random() < 0.12) {
-        botShoot(bot);
+
+      if (dist > 220) {
+        moveAngle = bot.angle;
+      } else if (dist > 90) {
+        moveAngle = bot.angle + bot.strafeDir * (Math.PI / 2);
+        if (bot.aiTimer < 8) bot.strafeDir *= -1;
+      } else {
+        moveAngle = bot.angle + Math.PI;
+        shouldMove = dist < 70;
       }
+
+      if (dist < 520 && bot.shootCooldown <= 0) {
+        const chance = dist < 280 ? 0.2 : 0.11;
+        if (Math.random() < chance) botShoot(bot);
+      }
+    } else {
+      bot.patrolAngle += 0.02;
+      moveAngle = bot.patrolAngle;
+      const toCenter = Math.atan2(centerY - bot.y, centerX - bot.x);
+      if (Math.hypot(bot.x - centerX, bot.y - centerY) > CELL * 10) moveAngle = toCenter;
+      bot.angle = moveAngle;
+    }
+
+    if (shouldMove) {
+      const nx = bot.x + Math.cos(moveAngle) * spd;
+      const ny = bot.y + Math.sin(moveAngle) * spd;
+      if (canMoveAt(nx, bot.y)) bot.x = nx;
+      if (canMoveAt(bot.x, ny)) bot.y = ny;
     }
   }
 }
